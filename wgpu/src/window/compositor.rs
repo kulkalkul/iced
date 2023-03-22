@@ -7,6 +7,7 @@ use iced_native::futures;
 use raw_window_handle::{HasRawDisplayHandle, HasRawWindowHandle};
 
 use std::marker::PhantomData;
+use wgpu::InstanceDescriptor;
 
 /// A window graphics backend for iced powered by `wgpu`.
 #[allow(missing_debug_implementations)]
@@ -31,7 +32,10 @@ impl<Theme> Compositor<Theme> {
         settings: Settings,
         compatible_window: Option<&W>,
     ) -> Option<Self> {
-        let instance = wgpu::Instance::new(settings.internal_backend);
+        let instance = wgpu::Instance::new(InstanceDescriptor {
+            backends: settings.internal_backend,
+            ..Default::default()
+        });
 
         log::info!("{:#?}", settings);
 
@@ -46,7 +50,8 @@ impl<Theme> Compositor<Theme> {
 
         #[allow(unsafe_code)]
         let compatible_surface = compatible_window
-            .map(|window| unsafe { instance.create_surface(window) });
+            .map(|window| unsafe { instance.create_surface(window) })
+            .map(|surface| surface.expect("Create surface"));
 
         let adapter = instance
             .request_adapter(&wgpu::RequestAdapterOptions {
@@ -63,7 +68,7 @@ impl<Theme> Compositor<Theme> {
         log::info!("Selected: {:#?}", adapter.get_info());
 
         let format = compatible_surface.as_ref().and_then(|surface| {
-            surface.get_supported_formats(&adapter).first().copied()
+            surface.get_capabilities(&adapter).formats.first().copied()
         })?;
 
         log::info!("Selected format: {:?}", format);
@@ -145,6 +150,7 @@ impl<Theme> iced_graphics::window::Compositor for Compositor<Theme> {
         #[allow(unsafe_code)]
         unsafe {
             self.instance.create_surface(window)
+                .expect("Create surface")
         }
     }
 
@@ -163,6 +169,7 @@ impl<Theme> iced_graphics::window::Compositor for Compositor<Theme> {
                 width,
                 height,
                 alpha_mode: wgpu::CompositeAlphaMode::Auto,
+                view_formats: Default::default(),
             },
         );
     }
